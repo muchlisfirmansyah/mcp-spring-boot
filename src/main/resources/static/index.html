@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Server Chat</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #FFFFFF;
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .chat-header {
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            padding: 16px 24px;
+            gap: 16px;
+            position: fixed;
+            width: 100%;
+            height: 72px;
+            left: 0px;
+            top: 0px;
+            background: #FFFFFF;
+            border-bottom: 1px solid #E5E8EC;
+            z-index: 1000;
+        }
+        
+        .header-logo {
+            width: 40px;
+            height: 40px;
+            background: #E1251B;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .header-content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 0px;
+            gap: 4px;
+            height: 40px;
+            flex: none;
+            order: 1;
+            flex-grow: 1;
+        }
+        
+        .header-title {
+            font-style: normal;
+            font-weight: 500;
+            font-size: 14px;
+            line-height: 20px;
+            color: #2C333C;
+        }
+        
+        .header-subtitle {
+            font-style: normal;
+            font-weight: 400;
+            font-size: 12px;
+            line-height: 16px;
+            color: #545B65;
+        }
+        
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0px;
+            position: absolute;
+            width: 100%;
+            height: calc(100vh - 72px);
+            left: 0;
+            top: 72px;
+            background: #FFFFFF;
+        }
+        
+        .chat-messages {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 32px;
+            gap: 12px;
+            width: min(1000px, 100%);
+            flex: 1;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+        
+        .message-frame {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 0px;
+            gap: 10px;
+            width: 100%;
+            min-height: 44px;
+            height: auto;
+            flex: none;
+            order: 0;
+            align-self: stretch;
+            flex-grow: 0;
+        }
+        
+        .message-frame.user {
+            align-items: flex-end;
+        }
+        
+        .chat-bubble {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            padding: 0px;
+            gap: 8px;
+        }
+        
+        .message-content {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-radius: 16px;
+        }
+        
+        .message-content.bot {
+            background: #F9FAFB;
+            border: 1px solid #E5E8EC;
+        }
+        
+        .message-content.user {
+            background: #CD1E15;
+        }
+        
+        .message-text {
+            font-style: normal;
+            font-weight: 400;
+            font-size: 14px;
+            line-height: 20px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        
+        .message-text.bot {
+            color: #2C333C;
+        }
+        
+        .message-text.user {
+            color: #FFFFFF;
+        }
+        
+        .chat-input-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 24px 32px;
+            gap: 10px;
+            width: 100%;
+            min-height: 188px;
+            flex: none;
+            order: 1;
+            flex-grow: 0;
+        }
+        
+        .chat-input {
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 16px;
+            gap: 10px;
+            width: min(936px, calc(100% - 64px));
+            height: auto;
+            min-height: 80px;
+            background: #FFFFFF;
+            border: 1px solid #E5E8EC;
+            box-shadow: 0px 12px 16px -4px rgba(16, 24, 40, 0.08), 0px 4px 6px -2px rgba(16, 24, 40, 0.03);
+            border-radius: 24px;
+            flex: none;
+            order: 0;
+            flex-grow: 0;
+        }
+        
+        .input-frame {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            padding: 0px;
+            gap: 16px;
+            width: 100%;
+            height: auto;
+            flex: none;
+            order: 0;
+            align-self: stretch;
+            flex-grow: 0;
+        }
+        
+        .input-field-frame {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            padding: 0px;
+            gap: 8px;
+            width: 100%;
+            height: 20px;
+            flex: none;
+            order: 0;
+            align-self: stretch;
+            flex-grow: 0;
+        }
+        
+        #userInput {
+            width: 100%;
+            height: 20px;
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 400;
+            font-size: 16px;
+            line-height: 20px;
+            color: #545B65;
+            border: none;
+            outline: none;
+            background: transparent;
+            flex: none;
+            order: 1;
+            flex-grow: 1;
+        }
+        
+        #userInput::placeholder {
+            color: #545B65;
+        }
+        
+        .button-frame {
+            display: flex;
+            flex-direction: row;
+            justify-content: flex-end;
+            align-items: flex-start;
+            padding: 0px;
+            gap: 8px;
+            width: 100%;
+            height: 40px;
+            flex: none;
+            order: 1;
+            align-self: stretch;
+            flex-grow: 0;
+        }
+        
+        .send-button {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: center;
+            padding: 10px 16px;
+            gap: 8px;
+            width: 95px;
+            height: 40px;
+            background: #E1251B;
+            border-radius: 1234px;
+            border: none;
+            cursor: pointer;
+            flex: none;
+            order: 2;
+            flex-grow: 0;
+        }
+        
+        .send-button:hover {
+            background: #CD1E15;
+        }
+        
+        .send-button-text {
+            font-family: 'Inter';
+            font-style: normal;
+            font-weight: 600;
+            font-size: 14px;
+            line-height: 20px;
+            color: #FFFFFF;
+            flex: none;
+            order: 1;
+            flex-grow: 0;
+        }
+        
+        .empty-state {
+            text-align: center;
+            color: #545B65;
+            font-style: italic;
+            margin-top: 50px;
+        }
+        
+        .loading-dots {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+        
+        .loading-dots span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #545B65;
+            animation: bounce 1.4s ease-in-out infinite both;
+        }
+        
+        .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0s; }
+        
+        @keyframes bounce {
+            0%, 80%, 100% { 
+                transform: scale(0);
+                opacity: 0.5;
+            } 40% { 
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-header">
+        <div class="header-logo">M</div>
+        <div class="header-content">
+            <div class="header-title">MCP Server Chat</div>
+            <div class="header-subtitle">Template MCP server with example tools</div>
+        </div>
+    </div>
+    
+    <div class="chat-container">
+        <div class="chat-messages" id="chatMessages">
+            <div class="empty-state" id="emptyState">No messages yet. Start a conversation!</div>
+        </div>
+        
+        <div class="chat-input-container">
+            <div class="chat-input">
+                <div class="input-frame">
+                    <div class="input-field-frame">
+                        <input type="text" id="userInput" placeholder="Send a message or ask anything..." required>
+                    </div>
+                    <div class="button-frame">
+                        <button type="submit" class="send-button" id="sendButton">
+                            <span class="send-button-text">Send</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Get webhook URL from server
+        const webhookUrl = '{{CHAT_WEBHOOK_URL}}';
+        
+        // Generate or get session ID
+        function getSessionId() {
+            let sessionId = sessionStorage.getItem('sessionId');
+            if (!sessionId) {
+                sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                sessionStorage.setItem('sessionId', sessionId);
+            }
+            return sessionId;
+        }
+        
+        async function sendToApi(message) {
+            try {
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        chatInput: message,
+                        sessionId: getSessionId()
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    // Handle the response format: [{ "output": "response text" }]
+                    if (Array.isArray(data) && data.length > 0 && data[0].output) {
+                        return data[0].output;
+                    }
+                    return 'Sorry, I received an unexpected response format.';
+                } else {
+                    throw new Error('Failed to send message');
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                return 'Sorry, I encountered an error. Please try again.';
+            }
+        }
+        
+        function showLoadingMessage() {
+            const container = document.getElementById('chatMessages');
+            
+            const messageFrame = document.createElement('div');
+            messageFrame.className = 'message-frame bot loading-message';
+            messageFrame.id = 'loading-message';
+            
+            const chatBubble = document.createElement('div');
+            chatBubble.className = 'chat-bubble';
+            
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content bot';
+            
+            const loadingDots = document.createElement('div');
+            loadingDots.className = 'loading-dots';
+            loadingDots.innerHTML = '<span></span><span></span><span></span>';
+            
+            messageContent.appendChild(loadingDots);
+            chatBubble.appendChild(messageContent);
+            messageFrame.appendChild(chatBubble);
+            container.appendChild(messageFrame);
+            
+            // Scroll to bottom
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function removeLoadingMessage() {
+            const loadingMessage = document.getElementById('loading-message');
+            if (loadingMessage) {
+                loadingMessage.remove();
+            }
+        }
+        
+        async function addMessage() {
+            const input = document.getElementById('userInput').value;
+            if (input.trim()) {
+                // Get existing messages from sessionStorage
+                let messages = JSON.parse(sessionStorage.getItem('chatMessages') || '[]');
+                
+                // Add user message
+                const userMessage = {
+                    text: input.trim(),
+                    timestamp: new Date().toISOString(),
+                    type: 'user'
+                };
+                messages.push(userMessage);
+                
+                // Save and display user message
+                sessionStorage.setItem('chatMessages', JSON.stringify(messages));
+                document.getElementById('userInput').value = '';
+                loadMessages();
+                
+                // Show loading indicator
+                showLoadingMessage();
+                
+                // Send to API and get response
+                const botResponse = await sendToApi(input.trim());
+                
+                // Remove loading indicator
+                removeLoadingMessage();
+                
+                // Add bot response
+                const botMessage = {
+                    text: botResponse,
+                    timestamp: new Date().toISOString(),
+                    type: 'bot'
+                };
+                messages.push(botMessage);
+                
+                // Save and display bot message
+                sessionStorage.setItem('chatMessages', JSON.stringify(messages));
+                loadMessages();
+            }
+        }
+        
+        document.getElementById('sendButton').addEventListener('click', function(e) {
+            e.preventDefault();
+            addMessage();
+        });
+        
+        document.getElementById('userInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addMessage();
+            }
+        });
+        
+        function makeLinksClickable(text) {
+            // URL regex pattern
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            return text.replace(urlRegex, (match, url) => {
+                const iframeId = 'iframe_' + Math.random().toString(36).substr(2, 9);
+                const linkId = 'link_' + Math.random().toString(36).substr(2, 9);
+                
+                // Set timeout to check if iframe loads
+                setTimeout(() => {
+                    const iframe = document.getElementById(iframeId);
+                    const link = document.getElementById(linkId);
+                    if (iframe && link) {
+                        try {
+                            // Try to access iframe content to check if it loaded
+                            iframe.contentDocument;
+                            // If we get here, iframe loaded successfully
+                            link.style.display = 'none';
+                        } catch (e) {
+                            // Cross-origin or blocked, show link instead
+                            iframe.style.display = 'none';
+                            link.style.display = 'block';
+                        }
+                    }
+                }, 3000);
+                
+                return `
+                    <div>
+                        <iframe id="${iframeId}" src="${url}" width="100%" height="400" 
+                                frameborder="0" style="margin: 10px 0; border-radius: 8px; display: block;">
+                        </iframe>
+                        <a id="${linkId}" href="${url}" target="_blank" rel="noopener noreferrer" 
+                           style="color: inherit; text-decoration: underline; display: none;">${url}</a>
+                    </div>
+                `;
+            });
+        }
+        
+        function loadMessages() {
+            // Get messages from sessionStorage
+            let messages = JSON.parse(sessionStorage.getItem('chatMessages') || '[]');
+            
+            // Add initial message if no messages exist
+            if (messages.length === 0) {
+                const initialMessage = {
+                    text: 'Welcome to the MCP Server Template! I\'m here to help demonstrate MCP tools. Try asking me to echo a message!',
+                    timestamp: new Date().toISOString(),
+                    type: 'bot'
+                };
+                messages.push(initialMessage);
+                sessionStorage.setItem('chatMessages', JSON.stringify(messages));
+            }
+            
+            // Display messages
+            const container = document.getElementById('chatMessages');
+            const emptyState = document.getElementById('emptyState');
+            
+            emptyState.style.display = 'none';
+            
+            // Clear existing messages except empty state
+            const messageElements = container.querySelectorAll('.message-frame');
+            messageElements.forEach(el => el.remove());
+            
+            messages.forEach(message => {
+                const messageFrame = document.createElement('div');
+                messageFrame.className = `message-frame ${message.type}`;
+                
+                const chatBubble = document.createElement('div');
+                chatBubble.className = 'chat-bubble';
+                
+                const messageContent = document.createElement('div');
+                messageContent.className = `message-content ${message.type}`;
+                
+                const messageText = document.createElement('div');
+                messageText.className = `message-text ${message.type}`;
+                messageText.innerHTML = makeLinksClickable(message.text);
+                
+                messageContent.appendChild(messageText);
+                chatBubble.appendChild(messageContent);
+                messageFrame.appendChild(chatBubble);
+                container.appendChild(messageFrame);
+            });
+            
+            // Scroll to bottom
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // Load messages when page loads
+        window.onload = loadMessages;
+        
+        // Auto-focus input
+        document.getElementById('userInput').focus();
+    </script>
+</body>
+</html>
