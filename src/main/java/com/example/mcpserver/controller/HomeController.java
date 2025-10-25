@@ -12,7 +12,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 @RestController
-@RequestMapping("/home")
+@RequestMapping("/")
 public class HomeController {
 
     @Value("${chat.webhook.url}")
