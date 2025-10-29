@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 @Service
 public class PaymentsAnalyticsToolService {
 
-    private final List<Map<String, Object>> smireData; // Data JSON dimuat di sini
+    private final List<Map<String, Object>> smireData;
 
     @Autowired
     public PaymentsAnalyticsToolService(ResourceLoader resourceLoader, ObjectMapper objectMapper) {
@@ -30,7 +30,18 @@ public class PaymentsAnalyticsToolService {
         if (this.smireData.isEmpty()) {
             System.err.println("PERINGATAN: data_smire_final.json gagal dimuat atau kosong. Tools akan mengembalikan hasil placeholder.");
         } else {
+            // Log total baris
             System.out.println("INFO: data_smire_final.json berhasil dimuat. Total baris: " + this.smireData.size());
+
+            // LOGGING DEBUG BARU: Tampilkan baris pertama
+            Map<String, Object> firstEntry = this.smireData.get(0);
+            System.out.println("DEBUG DUMP: Entry data pertama (Indeks 0) adalah: " + firstEntry);
+
+            // Logika untuk menampilkan nilai TPV/TPT dari baris pertama (Tambahan opsional)
+            if (firstEntry.containsKey("tpv") && firstEntry.containsKey("tpt")) {
+                System.out.println("DEBUG DUMP: Nilai TPV baris pertama: " + firstEntry.get("tpv") +
+                        " | Nilai TPT baris pertama: " + firstEntry.get("tpt"));
+            }
         }
     }
 
