@@ -334,7 +334,7 @@
         <div class="header-logo">M</div>
         <div class="header-content">
             <div class="header-title">MCP Server Chat</div>
-            <div class="header-subtitle">Template MCP server with example tools</div>
+            <div class="header-subtitle">Template Hack the AI server with example tools</div>
         </div>
     </div>
     
@@ -392,7 +392,7 @@
                     if (Array.isArray(data) && data.length > 0 && data[0].output) {
                         return data[0].output;
                     }
-                    return 'Sorry, I received an unexpected response format.';
+                    return data.output;
                 } else {
                     throw new Error('Failed to send message');
                 }

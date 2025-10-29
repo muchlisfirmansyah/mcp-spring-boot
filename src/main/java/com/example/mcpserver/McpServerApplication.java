@@ -1,6 +1,6 @@
 package com.example.mcpserver;
 
-import com.example.mcpserver.service.ToolService;
+import com.example.mcpserver.service.PaymentsAnalyticsToolService;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.boot.SpringApplication;
@@ -16,7 +16,7 @@ public class McpServerApplication {
 	}
 
 	@Bean
-	public ToolCallbackProvider checkStatusTools(ToolService checkStatusTool) {
+	public ToolCallbackProvider checkStatusTools(PaymentsAnalyticsToolService checkStatusTool) {
 		return MethodToolCallbackProvider.builder().toolObjects(checkStatusTool).build();
 	}
 
