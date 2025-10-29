@@ -25,7 +25,6 @@ public class PaymentsAnalyticsToolService {
 
     @Autowired
     public PaymentsAnalyticsToolService(ResourceLoader resourceLoader, ObjectMapper objectMapper) {
-        // Panggil method untuk memuat data saat service dibuat (Constructor Injection)
         this.smireData = loadSmireData(resourceLoader, objectMapper);
 
         if (this.smireData.isEmpty()) {
@@ -43,11 +42,9 @@ public class PaymentsAnalyticsToolService {
             // Path relatif terhadap src/main/resources/
             Resource resource = resourceLoader.getResource("classpath:data/data_smire_final.json");
             try (InputStream is = resource.getInputStream()) {
-                // Asumsi data JSON adalah Array of JSON Objects (List<Map<String, Object>>)
                 return objectMapper.readValue(is, List.class);
             }
         } catch (IOException e) {
-            // Log error dan kembalikan list kosong jika gagal
             System.err.println("FATAL ERROR: Gagal memuat data_smire_final.json dari 'classpath:data/': " + e.getMessage());
             return Collections.emptyList();
         }
@@ -68,26 +65,52 @@ public class PaymentsAnalyticsToolService {
             ensureYyyyMm(month);
             return month;
         }
-        // Placeholder bulan terbaru jika data gagal dimuat
-        if (this.smireData.isEmpty()) {
-            return "2024-06 (Placeholder)";
+
+        if (!this.smireData.isEmpty()) {
+            return this.smireData.stream()
+                    .map(item -> (String) item.get("month")) // Asumsi ada kolom 'month'
+                    .max(String::compareTo)
+                    .orElse("jun 2025");
         }
 
-        // Logika nyata: Mencari bulan terbaru dari data
-        return this.smireData.stream()
-                .map(item -> (String) item.get("month")) // Asumsi ada kolom 'month'
-                .max(String::compareTo) // Mencari bulan terbesar/terbaru
-                .orElse("2024-06 (Fallback)");
+        return "jun 2025 (Fallback)";
     }
 
-    // Helper untuk memfilter data berdasarkan parameter umum
+    /**
+     * Mengkonversi nilai TPV/TPT (yang berbentuk String dengan koma) menjadi Long.
+     */
+    private long parseNumericValue(Object value) {
+        if (value == null) return 0L;
+
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+
+        String strValue = String.valueOf(value);
+        try {
+            String cleanValue = strValue.replace(",", "").replace(" ", "").trim();
+            if (cleanValue.isEmpty() || cleanValue.equalsIgnoreCase("null")) {
+                return 0L;
+            }
+            return Long.parseLong(cleanValue);
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
+    }
+
+    /**
+     * Helper utama untuk memfilter data berdasarkan month, product_type, dan brand_id.
+     */
     private List<Map<String, Object>> filterData(String month, String product, String brand_id) {
         String resolvedMonth = resolveMonth(month);
 
         return this.smireData.stream()
                 .filter(item -> {
-                    boolean monthMatch = resolvedMonth.equals(item.get("month"));
-                    boolean productMatch = (product == null || product.equalsIgnoreCase((String) item.get("product")));
+                    boolean monthMatch = resolvedMonth.equalsIgnoreCase((String) item.get("month"));
+
+                    // PERBAIKAN PENTING: Menggunakan 'product_type' sebagai kolom data
+                    boolean productMatch = (product == null || product.equalsIgnoreCase((String) item.get("product_type")));
+
                     boolean brandIdMatch = (brand_id == null || brand_id.equalsIgnoreCase((String) item.get("brand_id")));
 
                     return monthMatch && productMatch && brandIdMatch;
@@ -101,11 +124,8 @@ public class PaymentsAnalyticsToolService {
     // ----------------------------------------------------------------------
 
     // =========================
-    // BARU: Tool: get_welcome_message
+    // Tool: get_welcome_message
     // =========================
-    /**
-     * Mengembalikan pesan sapaan selamat datang dan deskripsi singkat layanan SMIRE.
-     */
     @Tool(description = "Mengembalikan pesan sapaan saat user pertama kali menyapa atau meminta bantuan. Gunakan ini jika user mengetik 'halo', 'hi', atau 'bantuan'.")
     public String get_welcome_message() {
         return "Halo! 👋\n" +
@@ -126,47 +146,45 @@ public class PaymentsAnalyticsToolService {
             String month // Optional[str]
     ) {
         String resolvedMonth = resolveMonth(month);
-        List<Map<String, Object>> filteredList = filterData(month, null, null);
+        List<Map<String, Object>> filteredList = filterData(month, null, null); // Tidak ada filter produk
 
-        // --- KERANGKA IMPLEMENTASI MENGGUNAKAN DATA ---
         long totalMerchants = filteredList.stream()
                 .map(item -> (String) item.get("brand_id"))
                 .distinct()
                 .count();
-        // Logika nyata: Mengelompokkan berdasarkan kolom "Churn_Prediction"
+
         Map<String, Long> summary = filteredList.stream()
                 .filter(item -> item.get("Churn_Prediction") != null)
                 .collect(Collectors.groupingBy(
                         item -> (String) item.get("Churn_Prediction"),
                         Collectors.counting()
                 ));
-        // --- AKHIR KERANGKA IMPLEMENTASI ---
 
         return Map.of(
                 "metric", "Merchant Churn Potential Analysis",
                 "filters", Map.of("month", resolvedMonth),
                 "Total_Merchant_Count", totalMerchants,
-                "Summary", summary, // Menggunakan hasil grouping data
+                "Summary", summary,
                 "Potentially_Churning_Merchants", filteredList.stream()
                         .filter(item -> "Critical Risk".equals(item.get("Churn_Prediction")))
                         .map(item -> Map.of("brand_id", item.get("brand_id"), "Churn_Prediction", item.get("Churn_Prediction")))
-                        .limit(5) // Batasi output daftar merchant
+                        .limit(5)
                         .collect(Collectors.toList())
         );
     }
 
     // =========================
-    // Tool: get_churn_candidates (Modifikasi)
+    // Tool: get_churn_candidates
     // =========================
     @Tool(description = "Mengidentifikasi brand_id merchant yang berpotensi churn atau sudah churn; filters: month, product")
     public Map<String, Object> get_churn_candidates(
             String month, // Optional[str]
-            String product // Optional[str]
+            String product // Optional[str] -> Diteruskan sebagai filter product_type
     ) {
         String resolvedMonth = resolveMonth(month);
 
         List<String> churnCandidates = filterData(month, product, null).stream()
-                .filter(item -> "RISK".equalsIgnoreCase((String) item.get("Churn_Status"))) // Asumsi ada kolom 'Churn_Status'
+                .filter(item -> "RISK".equalsIgnoreCase((String) item.get("Churn_Status")))
                 .map(item -> (String) item.get("brand_id"))
                 .distinct()
                 .collect(Collectors.toList());
@@ -180,24 +198,19 @@ public class PaymentsAnalyticsToolService {
     }
 
     // =========================
-    // Tool: calculate_profit_total (Modifikasi)
+    // Tool: calculate_profit_total
     // =========================
     @Tool(description = "Menghitung total TPV dari transaksi berlabel 'profit' (dianggap profit); filters: month, product, brand_id")
     public Map<String, Object> calculate_profit_total(
             String month,     // Optional[str]
-            String product,   // Optional[str]
+            String product,   // Optional[str] -> Diteruskan sebagai filter product_type
             String brand_id   // Optional[str]
     ) {
         List<Map<String, Object>> filteredList = filterData(month, product, brand_id);
 
         long grandTotal = filteredList.stream()
-                .filter(item -> "PROFIT".equalsIgnoreCase((String) item.get("Transaction_Type"))) // Asumsi ada kolom 'Transaction_Type'
-                .mapToLong(item -> {
-                    // Konversi TPV (yang mungkin String atau Long) ke long untuk penjumlahan
-                    Object tpv = item.get("TPV");
-                    if (tpv instanceof Number) return ((Number) tpv).longValue();
-                    return 0L;
-                })
+                .filter(item -> "PROFIT".equalsIgnoreCase((String) item.get("Transaction_Type")))
+                .mapToLong(item -> parseNumericValue(item.get("tpv")))
                 .sum();
 
         return Map.of(
@@ -208,41 +221,92 @@ public class PaymentsAnalyticsToolService {
     }
 
     // =========================
-    // Tool: get_merchant_recommendation (Placeholder)
+    // Tool: calculate_overall_metrics
     // =========================
-    @Tool(description = "Menerbitkan rekomendasi aksi (Upsell, Cross-sell, Promotion, Reactivation) untuk semua merchant di bulan tertentu.")
-    public Map<String, Object> get_merchant_recommendation(String month) {
-        // ... Logika implementasi data ...
-        return Map.of("metric", "Merchant Recommendation Engine", "filters", Map.of("month", resolveMonth(month)), "Summary", Map.of("Upsell", 10, "Cross-sell", 20), "Recommendation_List", List.of());
+    @Tool(description = "Menghitung total TPT dan TPV (gabungan dari data churn & profit); filters: month, product, brand_id")
+    public Map<String, Object> calculate_overall_metrics(
+            String month,     // Optional[str]
+            String product,   // Optional[str] -> Diteruskan sebagai filter product_type
+            String brand_id   // Optional[str]
+    ) {
+        List<Map<String, Object>> filteredList = filterData(month, product, brand_id);
+
+        long totalTpt = filteredList.stream()
+                .mapToLong(item -> parseNumericValue(item.get("tpt")))
+                .sum();
+
+        long totalTpv = filteredList.stream()
+                .mapToLong(item -> parseNumericValue(item.get("tpv")))
+                .sum();
+
+        return Map.of(
+                "metric", "Overall Metrics",
+                "filters", Map.of("month", resolveMonth(month), "product", product, "brand_id", brand_id),
+                "total_tpt", totalTpt,
+                "total_tpv", totalTpv
+        );
     }
 
     // =========================
-    // Tool: get_product_mix_contribution (Placeholder)
+    // Tool: get_product_mix_contribution
     // =========================
     @Tool(description = "Menghitung kontribusi (persentase) TPV dan TPT dari setiap 'product_type' di bulan tertentu.")
     public Map<String, Object> get_product_mix_contribution(String month) {
-        // ... Logika implementasi data ...
-        return Map.of("metric", "Product Mix Contribution", "filters", Map.of("month", resolveMonth(month)), "GrandTotalTPV", "125,000,000", "mix_by_product", Map.of());
+        String resolvedMonth = resolveMonth(month);
+        List<Map<String, Object>> filteredList = filterData(month, null, null); // Tidak ada filter produk
+
+        long grandTotalTpv = filteredList.stream()
+                .mapToLong(item -> parseNumericValue(item.get("tpv")))
+                .sum();
+
+        Map<String, Map<String, Object>> mixByProduct = filteredList.stream()
+                .collect(Collectors.groupingBy(
+                        item -> (String) item.get("product_type"),
+                        Collectors.collectingAndThen(
+                                Collectors.summingLong(item -> parseNumericValue(item.get("tpv"))),
+                                totalTpvPerProduct -> {
+                                    double pct = (grandTotalTpv > 0) ?
+                                            (double) totalTpvPerProduct / grandTotalTpv * 100.0 : 0.0;
+                                    return Map.of(
+                                            "TotalTPV", totalTpvPerProduct,
+                                            "TPV_Pct", String.format("%.2f%%", pct)
+                                    );
+                                }
+                        )
+                ));
+
+        return Map.of(
+                "metric", "Product Mix Contribution",
+                "filters", Map.of("month", resolvedMonth),
+                "GrandTotalTPV", grandTotalTpv,
+                "mix_by_product", mixByProduct
+        );
     }
 
     // =========================
-    // Tool: calculate_overall_metrics (Placeholder)
-    // =========================
-    @Tool(description = "Menghitung total TPT dan TPV (gabungan dari data churn & profit); filters: month, product, brand_id")
-    public Map<String, Object> calculate_overall_metrics(String month, String product, String brand_id) {
-        // ... Logika implementasi data ...
-        return Map.of("metric", "Overall Metrics", "filters", Map.of("month", resolveMonth(month), "product", product, "brand_id", brand_id), "total_tpt", 0, "total_tpv", 0);
-    }
-
-    // =========================
-    // Tool: get_monthly_change (Placeholder)
+    // Tool: get_monthly_change
     // =========================
     @Tool(description = "Menghitung perubahan persentase (Growth/Decline) TPV/TPT antara dua bulan (month_a ke month_b); filters: product, brand_id")
-    public Map<String, Object> get_monthly_change(String month_a, String month_b, String product, String brand_id) {
-        // ... Logika implementasi data ...
+    public Map<String, Object> get_monthly_change(
+            String month_a, // str
+            String month_b, // str
+            String product,   // Optional[str] -> Diteruskan sebagai filter product_type
+            String brand_id   // Optional[str]
+    ) {
         ensureYyyyMm(month_a);
         ensureYyyyMm(month_b);
+        // Implementasikan logika perbandingan bulan di sini, menggunakan filterData(month_a, product, brand_id) dan filterData(month_b, product, brand_id)
         return Map.of("metric", "Monthly Change (" + month_a + " -> " + month_b + ")", "filters", Map.of("product", product, "brand_id", brand_id), "TpvGrowthPct", "0.00%");
+    }
+
+    // =========================
+    // Tool: get_merchant_recommendation (Placeholder)
+    // =========================
+    // Tool ini tidak menerima filter product
+    @Tool(description = "Menerbitkan rekomendasi aksi (Upsell, Cross-sell, Promotion, Reactivation) untuk semua merchant di bulan tertentu.")
+    public Map<String, Object> get_merchant_recommendation(String month) {
+        String resolvedMonth = resolveMonth(month);
+        return Map.of("metric", "Merchant Recommendation Engine", "filters", Map.of("month", resolvedMonth), "Summary", Map.of("Upsell", 10, "Cross-sell", 20), "Recommendation_List", List.of());
     }
 
     // =========================
@@ -250,8 +314,8 @@ public class PaymentsAnalyticsToolService {
     // =========================
     @Tool(description = "Menghitung kontribusi (persentase) TPV dan TPT dari setiap produk di bulan tertentu; filter: month")
     public Map<String, Object> get_product_mix(String month) {
-        // ... Logika implementasi data ...
         if (month != null) ensureYyyyMm(month);
+        // Tool ini fungsionalitasnya mirip dengan get_product_mix_contribution dan tidak menerima filter product
         return Map.of("metric", "Product Mix Contribution", "filters", Map.of("month", resolveMonth(month)), "GrandTotalTPV", 0L, "mix_by_product", Map.of());
     }
 }
