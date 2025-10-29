@@ -14,10 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/**
- * Service untuk menyediakan Tools Analisis Pembayaran kepada Spring AI.
- * Implementasi logika bisnis menggunakan data yang dimuat dari data_smire_final.json.
- */
+// ... (Bagian Javadoc)
+
 @Service
 public class PaymentsAnalyticsToolService {
 
@@ -32,301 +30,342 @@ public class PaymentsAnalyticsToolService {
         } else {
             // Log total baris
             System.out.println("INFO: data_smire_final.json berhasil dimuat. Total baris: " + this.smireData.size());
-
-            // LOGGING DEBUG BARU: Tampilkan baris pertama
-            Map<String, Object> firstEntry = this.smireData.get(0);
-            System.out.println("DEBUG DUMP: Entry data pertama (Indeks 0) adalah: " + firstEntry);
-
-            // Logika untuk menampilkan nilai TPV/TPT dari baris pertama (Tambahan opsional)
-            if (firstEntry.containsKey("tpv") && firstEntry.containsKey("tpt")) {
-                System.out.println("DEBUG DUMP: Nilai TPV baris pertama: " + firstEntry.get("tpv") +
-                        " | Nilai TPT baris pertama: " + firstEntry.get("tpt"));
-            }
         }
     }
 
-    /**
-     * Memuat dan mengurai data JSON dari classpath (src/main/resources/data/data_smire_final.json).
-     */
+    // =========================
+    // Private Utility Methods
+    // =========================
+
+    // Metode untuk memuat data dari JSON
     private List<Map<String, Object>> loadSmireData(ResourceLoader resourceLoader, ObjectMapper objectMapper) {
         try {
-            // Path relatif terhadap src/main/resources/
             Resource resource = resourceLoader.getResource("classpath:data/data_smire_final.json");
+
+            // Cek apakah resource benar-benar ada (Tambahan Debugging)
+            if (!resource.exists()) {
+                throw new IOException("File data_smire_final.json tidak ditemukan di classpath.");
+            }
+
             try (InputStream is = resource.getInputStream()) {
-                return objectMapper.readValue(is, List.class);
+                List<Map<String, Object>> data = objectMapper.readValue(is, objectMapper.getTypeFactory().constructCollectionType(List.class, Map.class));
+
+                // Cek apakah data kosong (Tambahan Debugging)
+                if (data.isEmpty()) {
+                    System.err.println("PERINGATAN: data_smire_final.json ditemukan, tetapi kontennya kosong atau tidak valid.");
+                }
+
+                return data;
             }
         } catch (IOException e) {
-            System.err.println("FATAL ERROR: Gagal memuat data_smire_final.json dari 'classpath:data/': " + e.getMessage());
+            // Error ini akan menangkap jika file tidak ada atau gagal dibaca/parse
+            System.err.println("Gagal memuat data_smire_final.json: " + e.getMessage());
             return Collections.emptyList();
         }
     }
 
-    // ----------------------------------------------------------------------
-    // HELPER METHODS
-    // ----------------------------------------------------------------------
+    // ... (sisa utility methods dan tool methods lainnya)
 
-    private void ensureYyyyMm(String month) {
-        if (month != null && !month.matches("\\d{4}-\\d{2}")) {
-            throw new IllegalArgumentException("month must be in YYYY-MM format, e.g. 2025-07");
-        }
-    }
-
+    // Utility untuk menyesuaikan format bulan (asumsi input Oct-24)
     private String resolveMonth(String month) {
-        if (month != null) {
-            ensureYyyyMm(month);
-            return month;
-        }
-
-        if (!this.smireData.isEmpty()) {
-            return this.smireData.stream()
-                    .map(item -> (String) item.get("month")) // Asumsi ada kolom 'month'
-                    .max(String::compareTo)
-                    .orElse("jun 2025");
-        }
-
-        return "jun 2025 (Fallback)";
+        // Mengembalikan nilai bulan apa adanya karena format data sudah Oct-24
+        return month;
     }
 
-    /**
-     * Mengkonversi nilai TPV/TPT (yang berbentuk String dengan koma) menjadi Long.
-     */
-    private long parseNumericValue(Object value) {
-        if (value == null) return 0L;
+    // Utility untuk validasi format bulan (placeholder)
+    private void ensureYyyyMm(String month) {
+        // Logika validasi bulan dapat ditambahkan di sini
+    }
 
-        if (value instanceof Number) {
-            return ((Number) value).longValue();
+    // Utility untuk membersihkan string angka dan mengonversinya menjadi Double
+    private double cleanAndParseNumber(Object value) {
+        if (value == null) {
+            return 0.0;
         }
-
-        String strValue = String.valueOf(value);
+        // Menghapus koma (misalnya "1,000,000" menjadi "1000000")
+        String s = value.toString().replace(",", "").trim();
         try {
-            String cleanValue = strValue.replace(",", "").replace(" ", "").trim();
-            if (cleanValue.isEmpty() || cleanValue.equalsIgnoreCase("null")) {
-                return 0L;
-            }
-            return Long.parseLong(cleanValue);
+            return Double.parseDouble(s);
         } catch (NumberFormatException e) {
-            return 0L;
+            return 0.0;
         }
     }
 
-    /**
-     * Helper utama untuk memfilter data berdasarkan month, product_type, dan brand_id.
-     */
-    private List<Map<String, Object>> filterData(String month, String product, String brand_id) {
-        String resolvedMonth = resolveMonth(month);
+    // Utility untuk memfilter data berdasarkan semua kriteria
+    private List<Map<String, Object>> filterData(String month, String pillar, String product_type, String brand_id, String merchant_name) {
+        if (this.smireData == null || this.smireData.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        return this.smireData.stream()
-                .filter(item -> {
-                    boolean monthMatch = resolvedMonth.equalsIgnoreCase((String) item.get("month"));
+        return this.smireData.stream().filter(entry -> {
+            boolean monthMatch = (month == null || resolveMonth(month).equals(entry.get("month")));
+            // PERUBAHAN: pillar dan product_type diizinkan null atau kosong untuk kebutuhan grouping
+            boolean pillarMatch = (pillar == null || pillar.isEmpty() || pillar.equals(entry.get("pillar")));
+            boolean productMatch = (product_type == null || product_type.isEmpty() || product_type.equals(entry.get("product_type")));
+            boolean brandIdMatch = (brand_id == null || brand_id.isEmpty() || brand_id.equals(entry.get("brand_id")));
 
-                    // PERBAIKAN PENTING: Menggunakan 'product_type' sebagai kolom data
-                    boolean productMatch = (product == null || product.equalsIgnoreCase((String) item.get("product_type")));
+            // Filter berdasarkan merchant_name (case-insensitive)
+            boolean merchantNameMatch = (merchant_name == null || merchant_name.isEmpty() ||
+                    (entry.get("merchant_name") != null && merchant_name.equalsIgnoreCase(entry.get("merchant_name").toString())));
 
-                    boolean brandIdMatch = (brand_id == null || brand_id.equalsIgnoreCase((String) item.get("brand_id")));
+            return monthMatch && pillarMatch && productMatch && brandIdMatch && merchantNameMatch;
 
-                    return monthMatch && productMatch && brandIdMatch;
-                })
-                .collect(Collectors.toList());
-    }
-
-
-    // ----------------------------------------------------------------------
-    // TOOL IMPLEMENTATIONS
-    // ----------------------------------------------------------------------
-
-    // =========================
-    // Tool: get_welcome_message
-    // =========================
-    @Tool(description = "Mengembalikan pesan sapaan saat user pertama kali menyapa atau meminta bantuan. Gunakan ini jika user mengetik 'halo', 'hi', atau 'bantuan'.")
-    public String get_welcome_message() {
-        return "Halo! 👋\n" +
-                "Selamat datang di SMIRE (Smart Merchant Insight & Recommendation Engine).\n\n" +
-                "Saya di sini untuk membantu Anda mendapatkan insight dan rekomendasi cerdas tentang perkembangan merchant DOKU.\n\n" +
-                "Melalui WhatsApp ini, Anda bisa dengan mudah:\n" +
-                "✅ Melihat status dan performa merchant Anda\n" +
-                "✅ Menerima insight dan rekomendasi untuk meningkatkan pertumbuhan\n" +
-                "✅ Mengakses laporan singkat terkait growth merchant\n \n" +
-                "Silahkan bertanya untuk mendapatkan insight:\n";
+        }).collect(Collectors.toList());
     }
 
     // =========================
-    // Tool: get_churn_prediction_analysis
+    // Tool: get_summary_analytics
     // =========================
-    @Tool(description = "Menganalisis potensi churn merchant pada bulan tertentu, mengembalikan ringkasan kategori performa dan daftar merchant berpotensi churn.")
-    public Map<String, Object> get_churn_prediction_analysis(
-            String month // Optional[str]
+    @Tool(description = "Meringkas total TPV dan TPT berdasarkan filter: month (Wajib, format Oct-24), pillar, product_type, brand_id, dan merchant_name.")
+    public Map<String, Object> get_summary_analytics(
+            String month,             // Wajib (e.g., "Oct-24")
+            String pillar,            // Optional
+            String product_type,      // Optional
+            String brand_id,          // Optional
+            String merchant_name      // Optional merchant_name
     ) {
         String resolvedMonth = resolveMonth(month);
-        List<Map<String, Object>> filteredList = filterData(month, null, null); // Tidak ada filter produk
+        List<Map<String, Object>> filteredData = filterData(resolvedMonth, pillar, product_type, brand_id, merchant_name);
 
-        long totalMerchants = filteredList.stream()
-                .map(item -> (String) item.get("brand_id"))
-                .distinct()
-                .count();
+        double totalTpv = filteredData.stream()
+                .mapToDouble(entry -> cleanAndParseNumber(entry.get("tpv")))
+                .sum();
 
-        Map<String, Long> summary = filteredList.stream()
-                .filter(item -> item.get("Churn_Prediction") != null)
-                .collect(Collectors.groupingBy(
-                        item -> (String) item.get("Churn_Prediction"),
-                        Collectors.counting()
-                ));
-
-        return Map.of(
-                "metric", "Merchant Churn Potential Analysis",
-                "filters", Map.of("month", resolvedMonth),
-                "Total_Merchant_Count", totalMerchants,
-                "Summary", summary,
-                "Potentially_Churning_Merchants", filteredList.stream()
-                        .filter(item -> "Critical Risk".equals(item.get("Churn_Prediction")))
-                        .map(item -> Map.of("brand_id", item.get("brand_id"), "Churn_Prediction", item.get("Churn_Prediction")))
-                        .limit(5)
-                        .collect(Collectors.toList())
-        );
-    }
-
-    // =========================
-    // Tool: get_churn_candidates
-    // =========================
-    @Tool(description = "Mengidentifikasi brand_id merchant yang berpotensi churn atau sudah churn; filters: month, product")
-    public Map<String, Object> get_churn_candidates(
-            String month, // Optional[str]
-            String product // Optional[str] -> Diteruskan sebagai filter product_type
-    ) {
-        String resolvedMonth = resolveMonth(month);
-
-        List<String> churnCandidates = filterData(month, product, null).stream()
-                .filter(item -> "RISK".equalsIgnoreCase((String) item.get("Churn_Status")))
-                .map(item -> (String) item.get("brand_id"))
-                .distinct()
-                .collect(Collectors.toList());
-
-        return Map.of(
-                "metric", "Churn Candidates",
-                "filters", Map.of("month", resolvedMonth, "product", product),
-                "total_candidates", churnCandidates.size(),
-                "brand_ids", churnCandidates
-        );
-    }
-
-    // =========================
-    // Tool: calculate_profit_total
-    // =========================
-    @Tool(description = "Menghitung total TPV dari transaksi berlabel 'profit' (dianggap profit); filters: month, product, brand_id")
-    public Map<String, Object> calculate_profit_total(
-            String month,     // Optional[str]
-            String product,   // Optional[str] -> Diteruskan sebagai filter product_type
-            String brand_id   // Optional[str]
-    ) {
-        List<Map<String, Object>> filteredList = filterData(month, product, brand_id);
-
-        long grandTotal = filteredList.stream()
-                .filter(item -> "PROFIT".equalsIgnoreCase((String) item.get("Transaction_Type")))
-                .mapToLong(item -> parseNumericValue(item.get("tpv")))
+        double totalTpt = filteredData.stream()
+                .mapToDouble(entry -> cleanAndParseNumber(entry.get("tpt")))
                 .sum();
 
         return Map.of(
-                "metric", "Profit TPV",
-                "filters", Map.of("month", resolveMonth(month), "product", product, "brand_id", brand_id),
-                "grand_total", grandTotal
+                "metric", "Monthly Summary for " + resolvedMonth,
+                "filters", Map.of(
+                        "month", resolvedMonth,
+                        "pillar", (pillar != null ? pillar : ""),
+                        "product_type", (product_type != null ? product_type : ""),
+                        "brand_id", (brand_id != null ? brand_id : ""),
+                        "merchant_name", (merchant_name != null ? merchant_name : "")
+                ),
+                "Total_TPV", totalTpv,
+                "Total_TPT", (long) totalTpt
         );
     }
 
     // =========================
-    // Tool: calculate_overall_metrics
+    // Tool: get_monthly_growth
     // =========================
-    @Tool(description = "Menghitung total TPT dan TPV (gabungan dari data churn & profit); filters: month, product, brand_id")
-    public Map<String, Object> calculate_overall_metrics(
-            String month,     // Optional[str]
-            String product,   // Optional[str] -> Diteruskan sebagai filter product_type
-            String brand_id   // Optional[str]
-    ) {
-        List<Map<String, Object>> filteredList = filterData(month, product, brand_id);
-
-        long totalTpt = filteredList.stream()
-                .mapToLong(item -> parseNumericValue(item.get("tpt")))
-                .sum();
-
-        long totalTpv = filteredList.stream()
-                .mapToLong(item -> parseNumericValue(item.get("tpv")))
-                .sum();
-
-        return Map.of(
-                "metric", "Overall Metrics",
-                "filters", Map.of("month", resolveMonth(month), "product", product, "brand_id", brand_id),
-                "total_tpt", totalTpt,
-                "total_tpv", totalTpv
-        );
-    }
-
-    // =========================
-    // Tool: get_product_mix_contribution
-    // =========================
-    @Tool(description = "Menghitung kontribusi (persentase) TPV dan TPT dari setiap 'product_type' di bulan tertentu.")
-    public Map<String, Object> get_product_mix_contribution(String month) {
-        String resolvedMonth = resolveMonth(month);
-        List<Map<String, Object>> filteredList = filterData(month, null, null); // Tidak ada filter produk
-
-        long grandTotalTpv = filteredList.stream()
-                .mapToLong(item -> parseNumericValue(item.get("tpv")))
-                .sum();
-
-        Map<String, Map<String, Object>> mixByProduct = filteredList.stream()
-                .collect(Collectors.groupingBy(
-                        item -> (String) item.get("product_type"),
-                        Collectors.collectingAndThen(
-                                Collectors.summingLong(item -> parseNumericValue(item.get("tpv"))),
-                                totalTpvPerProduct -> {
-                                    double pct = (grandTotalTpv > 0) ?
-                                            (double) totalTpvPerProduct / grandTotalTpv * 100.0 : 0.0;
-                                    return Map.of(
-                                            "TotalTPV", totalTpvPerProduct,
-                                            "TPV_Pct", String.format("%.2f%%", pct)
-                                    );
-                                }
-                        )
-                ));
-
-        return Map.of(
-                "metric", "Product Mix Contribution",
-                "filters", Map.of("month", resolvedMonth),
-                "GrandTotalTPV", grandTotalTpv,
-                "mix_by_product", mixByProduct
-        );
-    }
-
-    // =========================
-    // Tool: get_monthly_change
-    // =========================
-    @Tool(description = "Menghitung perubahan persentase (Growth/Decline) TPV/TPT antara dua bulan (month_a ke month_b); filters: product, brand_id")
-    public Map<String, Object> get_monthly_change(
-            String month_a, // str
-            String month_b, // str
-            String product,   // Optional[str] -> Diteruskan sebagai filter product_type
-            String brand_id   // Optional[str]
+    @Tool(description = "Menghitung persentase pertumbuhan TPV antara dua bulan. Filter: month_a (bulan awal), month_b (bulan akhir), pillar, product_type, brand_id, dan merchant_name. Catatan: month harus dalam format Oct-24.")
+    public Map<String, Object> get_monthly_growth(
+            String month_a,            // Wajib (Bulan awal, e.g., "Oct-24")
+            String month_b,            // Wajib (Bulan akhir, e.g., "Nov-24")
+            String pillar,             // Optional[str]
+            String product_type,       // Optional[str]
+            String brand_id,           // Optional[str]
+            String merchant_name       // Optional[str]
     ) {
         ensureYyyyMm(month_a);
         ensureYyyyMm(month_b);
-        // Implementasikan logika perbandingan bulan di sini, menggunakan filterData(month_a, product, brand_id) dan filterData(month_b, product, brand_id)
-        return Map.of("metric", "Monthly Change (" + month_a + " -> " + month_b + ")", "filters", Map.of("product", product, "brand_id", brand_id), "TpvGrowthPct", "0.00%");
+
+        // Filter data dan hitung TPV untuk Bulan A
+        List<Map<String, Object>> dataA = filterData(resolveMonth(month_a), pillar, product_type, brand_id, merchant_name);
+        double totalTpvA = dataA.stream()
+                .mapToDouble(entry -> cleanAndParseNumber(entry.get("tpv")))
+                .sum();
+
+        // Filter data dan hitung TPV untuk Bulan B
+        List<Map<String, Object>> dataB = filterData(resolveMonth(month_b), pillar, product_type, brand_id, merchant_name);
+        double totalTpvB = dataB.stream()
+                .mapToDouble(entry -> cleanAndParseNumber(entry.get("tpv")))
+                .sum();
+
+        String growthPct;
+
+        if (totalTpvA > 0) {
+            double growth = ((totalTpvB - totalTpvA) / totalTpvA) * 100;
+            growthPct = String.format("%.2f%%", growth);
+        } else if (totalTpvA == 0 && totalTpvB > 0) {
+            growthPct = "Inf";
+        } else {
+            growthPct = "0.00%";
+        }
+
+        return Map.of(
+                "metric", "Monthly TPV Growth (" + month_a + " -> " + month_b + ")",
+                "filters", Map.of(
+                        "month_a", resolveMonth(month_a),
+                        "month_b", resolveMonth(month_b),
+                        "pillar", (pillar != null ? pillar : ""),
+                        "product_type", (product_type != null ? product_type : ""),
+                        "brand_id", (brand_id != null ? brand_id : ""),
+                        "merchant_name", (merchant_name != null ? merchant_name : "")
+                ),
+                "TPV_A", totalTpvA,
+                "TPV_B", totalTpvB,
+                "TpvGrowthPct", growthPct
+        );
     }
 
     // =========================
     // Tool: get_merchant_recommendation (Placeholder)
     // =========================
-    // Tool ini tidak menerima filter product
     @Tool(description = "Menerbitkan rekomendasi aksi (Upsell, Cross-sell, Promotion, Reactivation) untuk semua merchant di bulan tertentu.")
     public Map<String, Object> get_merchant_recommendation(String month) {
         String resolvedMonth = resolveMonth(month);
+        // Placeholder implementasi
         return Map.of("metric", "Merchant Recommendation Engine", "filters", Map.of("month", resolvedMonth), "Summary", Map.of("Upsell", 10, "Cross-sell", 20), "Recommendation_List", List.of());
     }
 
     // =========================
-    // Tool: get_product_mix (Placeholder)
+    // Tool: get_product_mix
     // =========================
-    @Tool(description = "Menghitung kontribusi (persentase) TPV dan TPT dari setiap produk di bulan tertentu; filter: month")
-    public Map<String, Object> get_product_mix(String month) {
+    @Tool(description = "Menghitung kontribusi (persentase) TPV dan TPT dari setiap produk di bulan tertentu. Filter: month (Wajib), pillar, brand_id, merchant_name.")
+    public Map<String, Object> get_product_mix(
+            String month,             // Wajib (e.g., "Oct-24")
+            String pillar,            // Optional
+            String brand_id,          // Optional
+            String merchant_name      // Optional merchant_name
+    ) {
         if (month != null) ensureYyyyMm(month);
-        // Tool ini fungsionalitasnya mirip dengan get_product_mix_contribution dan tidak menerima filter product
-        return Map.of("metric", "Product Mix Contribution", "filters", Map.of("month", resolveMonth(month)), "GrandTotalTPV", 0L, "mix_by_product", Map.of());
+
+        // Catatan: product_type dibuat null di filterData karena kita ingin menghitung mix-nya
+        List<Map<String, Object>> filteredData = filterData(resolveMonth(month), pillar, null, brand_id, merchant_name);
+
+        // Agregasi berdasarkan product_type
+        Map<String, List<Map<String, Object>>> dataByProduct = filteredData.stream()
+                .collect(Collectors.groupingBy(entry -> (String) entry.getOrDefault("product_type", "Unknown")));
+
+        double totalTpvAll = filteredData.stream()
+                .mapToDouble(entry -> cleanAndParseNumber(entry.get("tpv")))
+                .sum();
+
+        Map<String, Map<String, Object>> mixResult = dataByProduct.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> {
+                            double productTpv = entry.getValue().stream()
+                                    .mapToDouble(e -> cleanAndParseNumber(e.get("tpv")))
+                                    .sum();
+                            double productTpt = entry.getValue().stream()
+                                    .mapToDouble(e -> cleanAndParseNumber(e.get("tpt")))
+                                    .sum();
+
+                            // Hitung kontribusi TPV
+                            String tpvPct = (totalTpvAll > 0) ? String.format("%.2f%%", (productTpv / totalTpvAll) * 100) : "0.00%";
+
+                            return Map.of(
+                                    "TPV_Value", productTpv,
+                                    "TPT_Value", (long) productTpt,
+                                    "TPV_Contribution_Pct", tpvPct
+                            );
+                        }
+                ));
+
+        return Map.of(
+                "metric", "Product Mix for " + resolveMonth(month),
+                "filters", Map.of(
+                        "month", resolveMonth(month),
+                        "pillar", (pillar != null ? pillar : ""),
+                        "brand_id", (brand_id != null ? brand_id : ""),
+                        "merchant_name", (merchant_name != null ? merchant_name : "")
+                ),
+                "Total_TPV_All", totalTpvAll,
+                "Product_Mix", mixResult
+        );
+    }
+
+    // =========================
+    // Tool: get_data_by_pillar
+    // =========================
+    @Tool(description = "Menghitung total TPV dan TPT yang dikelompokkan berdasarkan 'pillar'. Filter: month (Wajib), brand_id, product_type, merchant_name.")
+    public Map<String, Object> get_data_by_pillar(
+            String month,             // Wajib (e.g., "Oct-24")
+            String brand_id,          // Optional
+            String product_type,      // Optional
+            String merchant_name      // Optional
+    ) {
+        if (month != null) ensureYyyyMm(month);
+
+        // Catatan: pillar dibuat null di filterData karena kita ingin mengelompokkan berdasarkan pillar
+        List<Map<String, Object>> filteredData = filterData(resolveMonth(month), null, product_type, brand_id, merchant_name);
+
+        // Agregasi berdasarkan pillar
+        Map<String, List<Map<String, Object>>> dataByPillar = filteredData.stream()
+                .collect(Collectors.groupingBy(entry -> (String) entry.getOrDefault("pillar", "Unknown")));
+
+        Map<String, Map<String, Object>> result = dataByPillar.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> {
+                            double pillarTpv = entry.getValue().stream()
+                                    .mapToDouble(e -> cleanAndParseNumber(e.get("tpv")))
+                                    .sum();
+                            double pillarTpt = entry.getValue().stream()
+                                    .mapToDouble(e -> cleanAndParseNumber(e.get("tpt")))
+                                    .sum();
+
+                            return Map.of(
+                                    "TPV_Value", pillarTpv,
+                                    "TPT_Value", (long) pillarTpt
+                            );
+                        }
+                ));
+
+        return Map.of(
+                "metric", "Data Grouped By Pillar for " + resolveMonth(month),
+                "filters", Map.of(
+                        "month", resolveMonth(month),
+                        "product_type", (product_type != null ? product_type : ""),
+                        "brand_id", (brand_id != null ? brand_id : ""),
+                        "merchant_name", (merchant_name != null ? merchant_name : "")
+                ),
+                "Data_By_Pillar", result
+        );
+    }
+
+    // =========================
+    // Tool: get_data_by_product_type
+    // =========================
+    @Tool(description = "Menghitung total TPV dan TPT yang dikelompokkan berdasarkan 'product_type'. Filter: month (Wajib), pillar, brand_id, merchant_name.")
+    public Map<String, Object> get_data_by_product_type(
+            String month,             // Wajib (e.g., "Oct-24")
+            String pillar,            // Optional
+            String brand_id,          // Optional
+            String merchant_name      // Optional
+    ) {
+        if (month != null) ensureYyyyMm(month);
+
+        // Catatan: product_type dibuat null di filterData karena kita ingin mengelompokkan berdasarkan product_type
+        List<Map<String, Object>> filteredData = filterData(resolveMonth(month), pillar, null, brand_id, merchant_name);
+
+        // Agregasi berdasarkan product_type
+        Map<String, List<Map<String, Object>>> dataByProductType = filteredData.stream()
+                .collect(Collectors.groupingBy(entry -> (String) entry.getOrDefault("product_type", "Unknown")));
+
+        Map<String, Map<String, Object>> result = dataByProductType.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> {
+                            double productTpv = entry.getValue().stream()
+                                    .mapToDouble(e -> cleanAndParseNumber(e.get("tpv")))
+                                    .sum();
+                            double productTpt = entry.getValue().stream()
+                                    .mapToDouble(e -> cleanAndParseNumber(e.get("tpt")))
+                                    .sum();
+
+                            return Map.of(
+                                    "TPV_Value", productTpv,
+                                    "TPT_Value", (long) productTpt
+                            );
+                        }
+                ));
+
+        return Map.of(
+                "metric", "Data Grouped By Product Type for " + resolveMonth(month),
+                "filters", Map.of(
+                        "month", resolveMonth(month),
+                        "pillar", (pillar != null ? pillar : ""),
+                        "brand_id", (brand_id != null ? brand_id : ""),
+                        "merchant_name", (merchant_name != null ? merchant_name : "")
+                ),
+                "Data_By_Product_Type", result
+        );
     }
 }
