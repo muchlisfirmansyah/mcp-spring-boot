@@ -112,6 +112,20 @@ public class PaymentsAnalyticsToolService {
 
         }).collect(Collectors.toList());
     }
+    // =========================
+    // Tool: get_welcome_message (Greeting/Sapaan)
+    // =========================
+    @Tool(description = "Mengembalikan pesan sapaan saat user pertama kali menyapa atau meminta bantuan. Gunakan ini jika user mengetik 'halo', 'hi', atau 'bantuan'.")
+    public String get_welcome_message() {
+        return "Halo! 👋\n" +
+                "Selamat datang di S.M.I.R.E. (Smart Merchant Insight & Recommendation Engine).\n\n" +
+                "Di sini kamu bisa mendapatkan insight dan rekomendasi seputar performa produk dan merchant DOKU.\n\n" +
+                "Melalui WhatsApp ini, Anda dapat dengan mudah:\n" +
+                "📊 Melihat status dan performa produk serta merchant Anda\n" +
+                "💡 Menerima insight dan rekomendasi untuk peningkatan performa\n" +
+                "🚀 Mengakses laporan singkat terkait pertumbuhan bisnis\n \n" +
+                "Insight dan Rekomendasi apa yang kamu butuhkan hari ini?";
+    }
 
     // =========================
     // Tool: get_summary_analytics
