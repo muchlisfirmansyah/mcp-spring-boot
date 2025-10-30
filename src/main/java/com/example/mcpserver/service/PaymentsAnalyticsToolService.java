@@ -113,6 +113,21 @@ public class PaymentsAnalyticsToolService {
         }).collect(Collectors.toList());
     }
     // =========================
+    // Tool: get_welcome_message_en (English Greeting)
+    // =========================
+    @Tool(description = "Returns a welcome message in English when the user greets or asks for help in English (e.g., 'hello', or 'help').")
+    public String get_welcome_message_en() {
+        return "Hello! 👋\n" +
+                "Welcome to S.M.I.R.E. (Smart Merchant Insight & Recommendation Engine).\n\n" +
+                "Here, you can get insights and recommendations regarding DOKU product and merchant performance.\n\n" +
+                "Through this WhatsApp channel, you can easily:\n" +
+                "📊 View the status and performance of your products and merchants\n" +
+                "💡 Receive insights and recommendations for performance improvement\n" +
+                "🚀 Access brief reports related to business growth\n \n" +
+                "What Insights and Recommendations do you need today?";
+    }
+
+    // =========================
     // Tool: get_welcome_message (Greeting/Sapaan)
     // =========================
     @Tool(description = "Mengembalikan pesan sapaan saat user pertama kali menyapa atau meminta bantuan. Gunakan ini jika user mengetik 'halo', 'hi', atau 'bantuan'.")
